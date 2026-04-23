@@ -470,8 +470,8 @@ table { min-width:600px; }
       </div>
       <div class="sidebar-item" onclick="showPage('promoCodes')">
         <i class="fas fa-ticket-alt"></i> Promo Codes
-      </li>
-      <li class="nav-item" onclick="showPage('offerwalls')" id="nav-offerwalls">
+      </div>
+      <div class="sidebar-item" onclick="showPage('offerwalls')" id="nav-offerwalls">
         <i class="fas fa-layer-group"></i> Offerwalls
       </div>
     </div>
@@ -1236,12 +1236,19 @@ table { min-width:600px; }
         <label class="form-label">ICON (FontAwesome class)</label>
         <input class="form-input" id="task-icon" placeholder="fab fa-youtube" value="fas fa-tasks"/>
       </div>
-      <div class="toggle-row" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+      <div class="toggle-row" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
         <div class="toggle-info">
           <h4>🎬 Show Ad Before Coins</h4>
-          <p>User watches ad before getting coins for this task</p>
+          <p>User watches ad before getting coins</p>
         </div>
-        <label class="toggle"><input type="checkbox" id="task-showAd" checked/><span class="toggle-slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="task-showAd" checked onchange="toggleAdTypeField()"/><span class="toggle-slider"></span></label>
+      </div>
+      <div id="adTypeField" class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">AD TYPE</label>
+        <select class="form-select" id="task-adType">
+          <option value="interstitial">🎥 Rewarded Interstitial (Full screen video)</option>
+          <option value="popup">🌐 Rewarded Popup (Opens website)</option>
+        </select>
       </div>
       <button class="btn-primary" onclick="saveTask()" style="width:100%;justify-content:center;padding:14px;">
         <i class="fas fa-save"></i> SAVE TASK
@@ -1621,7 +1628,7 @@ async function doUnlock(pw) {
     } else {
       // First time — no password set in Firebase yet
       // Use hardcoded only for FIRST TIME SETUP
-      validPassword = ADMIN_PASSWORD;
+      validPassword = ADMIN_PASSWORD; // Firebase takes priority when set
       // Save it to Firebase immediately
       await db.ref('adminConfig/password').set(ADMIN_PASSWORD).catch(()=>{});
     }
@@ -1714,6 +1721,7 @@ function showPage(name) {
   if(name==='tasks') loadTasks();
   if(name==='promoCodes') loadPromoCodes();
   if(name==='notifications') loadSentNotifs();
+  if(name==='offerwalls') { loadOfferwallSettings(); if(typeof loadCustomOfferwallsList==='function') loadCustomOfferwallsList(); }
 }
 
 function toggleSidebar() {
@@ -2282,7 +2290,16 @@ async function loadTasks() {
   `).join('');
 }
 
-function openAddTask() { openModal('addTaskModal'); }
+function openAddTask() { 
+  openModal('addTaskModal');
+  toggleAdTypeField();
+}
+
+function toggleAdTypeField() {
+  const showAd = document.getElementById('task-showAd')?.checked;
+  const adTypeField = document.getElementById('adTypeField');
+  if(adTypeField) adTypeField.style.display = showAd ? 'block' : 'none';
+}
 
 function toggleTaskLinkField() {
   const type = document.getElementById('task-type')?.value;
@@ -2315,13 +2332,14 @@ async function saveTask() {
   const duration = parseInt(document.getElementById('task-timer').value)||15;
   const icon = document.getElementById('task-icon').value.trim()||'fas fa-tasks';
   const showAd = document.getElementById('task-showAd').checked;
+  const adType = document.getElementById('task-adType')?.value || 'interstitial';
   if(!title||!desc){showToast('Fill title and description!','danger');return;}
   if(!db){showToast('Firebase not connected!','danger');return;}
   const saveBtn = document.querySelector('#addTaskModal .btn-primary');
   saveBtn.innerHTML = '<span class="spinner" style="border-color:#000;border-top-color:transparent;"></span> Saving...';
   saveBtn.disabled = true;
   const id = 'task_'+Date.now();
-  const task = {id,type,title,desc,link,coins,duration,icon,showAd};
+  const task = {id,type,title,desc,link,coins,duration,icon,showAd,adType};
   const ok = await fbSet('tasks/'+id, task);
   saveBtn.innerHTML = '<i class="fas fa-save"></i> SAVE TASK';
   saveBtn.disabled = false;
@@ -2723,44 +2741,7 @@ async function saveAllSettings() {
 // ============================================================
 // OFFERWALL SETTINGS
 // ============================================================
-async function saveOfferwallSettings() {
-  if(!db) return;
-  const settings = {
-    wannads: {locked: !(document.getElementById('ow-wannads-enabled')?.checked)},
-    cpx: {forceLock: !!(document.getElementById('ow-cpx-forceLock')?.checked), forceUnlock: !!(document.getElementById('ow-cpx-forceUnlock')?.checked), lockMessage: document.getElementById('ow-cpx-lockMessage')?.value||'Complete your first withdrawal to unlock CPX Research!'},
-    timewall: {forceLock: !!(document.getElementById('ow-tw-forceLock')?.checked), forceUnlock: !!(document.getElementById('ow-tw-forceUnlock')?.checked), lockMessage: document.getElementById('ow-tw-lockMessage')?.value||'Complete your first withdrawal to unlock TimeWall!'},
 
-  };
-  await db.ref('offerwallSettings').set(settings).catch(e=>console.warn('OW save error:',e));
-  const walls = [{k:'cpx',b:'cpx-status-badge'},{k:'timewall',b:'tw-status-badge'},{k:'cpagrip',b:'cpa-status-badge'}];
-  walls.forEach(w=>{
-    const s=settings[w.k]||{};
-    const badge=document.getElementById(w.b);
-    if(!badge) return;
-    if(s.forceUnlock){badge.textContent='Unlocked';badge.style.background='#16a34a20';badge.style.color='#16a34a';badge.style.borderColor='#16a34a40';}
-    else if(s.forceLock){badge.textContent='Force Locked';badge.style.background='#ef444420';badge.style.color='#ef4444';badge.style.borderColor='#ef444440';}
-    else{badge.textContent='Auto Lock';badge.style.background='#ff990020';badge.style.color='#ff9900';badge.style.borderColor='#ff990040';}
-  });
-  showToast('✅ Offerwall settings saved!');
-}
-
-async function loadOfferwallSettings() {
-  loadCustomOfferwallsList();
-  const snap = await fbGet('offerwallSettings');
-  if(!snap||!snap.exists()) return;
-  const s = snap.val();
-  if(s.wannads) { const el=document.getElementById('ow-wannads-enabled'); if(el) el.checked=!s.wannads.locked; }
-  [{k:'cpx',p:'cpx'},{k:'timewall',p:'tw'},{k:'cpagrip',p:'cpa'}].forEach(w=>{
-    const d=s[w.k]||{};
-    const fl=document.getElementById('ow-'+w.p+'-forceLock');
-    const fu=document.getElementById('ow-'+w.p+'-forceUnlock');
-    const msg=document.getElementById('ow-'+w.p+'-lockMessage');
-    if(fl) fl.checked=!!d.forceLock;
-    if(fu) fu.checked=!!d.forceUnlock;
-    if(msg&&d.lockMessage) msg.value=d.lockMessage;
-  });
-  await saveOfferwallSettings();
-}
 
 function getPromoStatus(d) {
   if(d.expiresAt && d.expiresAt > 0 && Date.now() > d.expiresAt) return 'EXPIRED';
