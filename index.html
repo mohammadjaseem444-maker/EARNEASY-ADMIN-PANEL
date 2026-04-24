@@ -1604,37 +1604,19 @@ function tryUnlock() {
 }
 
 async function doUnlock(pw) {
-  // Show loading state
   const attemptsEl = document.getElementById('lockAttempts');
-  if(attemptsEl) attemptsEl.textContent = '🔄 Verifying...';
   
-  // ONLY Firebase password — NO hardcoded fallback
-  let validPassword = null;
-  
-  if(!db) {
-    // Firebase not connected yet — try to init first
-    if(attemptsEl) attemptsEl.textContent = '📵 Connecting to Firebase...';
-    await new Promise(r => setTimeout(r, 2000));
-    if(!db) {
-      if(attemptsEl) attemptsEl.textContent = '❌ No internet connection!';
-      return;
-    }
-  }
-  
-  try {
-    const pwSnap = await db.ref('adminConfig/password').get();
-    if(pwSnap && pwSnap.exists() && pwSnap.val()) {
-      validPassword = pwSnap.val();
-    } else {
-      // First time — no password set in Firebase yet
-      // Use hardcoded only for FIRST TIME SETUP
-      validPassword = ADMIN_PASSWORD; // Firebase takes priority when set
-      // Save it to Firebase immediately
-      await db.ref('adminConfig/password').set(ADMIN_PASSWORD).catch(()=>{});
-    }
-  } catch(e) {
-    if(attemptsEl) attemptsEl.textContent = '❌ Firebase error: ' + e.message;
-    return;
+  // Get valid password: Firebase first, hardcoded as fallback
+  let validPassword = ADMIN_PASSWORD;
+  if(db) {
+    try {
+      const s = await db.ref('adminConfig/password').get();
+      if(s && s.exists() && s.val()) {
+        validPassword = s.val();
+      } else {
+        db.ref('adminConfig/password').set(ADMIN_PASSWORD).catch(()=>{});
+      }
+    } catch(e) { console.warn('PW check:', e.message); }
   }
   
   if (pw === validPassword) {
@@ -2985,10 +2967,12 @@ function showToast(msg, type='success') {
 // INIT
 // ============================================================
 window.addEventListener('load', async () => {
+  // Init Firebase ALWAYS on load (needed for password check)
+  initFirebase();
+  
   if(sessionStorage.getItem('adminUnlocked')==='1') {
     document.getElementById('lockScreen').style.display='none';
     document.getElementById('adminApp').classList.add('active');
-    initFirebase();
   }
 });
 
