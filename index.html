@@ -1354,8 +1354,8 @@ table { min-width:600px; }
 <!-- TOAST -->
 
     <!-- ===== OFFERWALL SETTINGS PAGE ===== -->
-    <div class="page" id="page-offerwalls">
-      <div class="page-header">
+    <div class="page" id="page-offerwalls" style="padding-top:0;">
+      <div class="page-header" style="position:sticky;top:0;z-index:10;background:var(--bg);padding:16px 0 12px;">
         <div>
           <div class="page-title">Offerwall <span>Settings</span></div>
           <div class="page-sub">Control offerwall access for users</div>
@@ -1378,15 +1378,19 @@ table { min-width:600px; }
       <div id="customOfferwallsList" style="margin-bottom:14px;"></div>
       
       <!-- Wannads -->
-      <div class="settings-card" style="margin-bottom:12px;">
+      <div class="settings-card" style="margin-bottom:12px;border-color:#16a34a30;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
           <div style="width:36px;height:36px;border-radius:10px;background:#16a34a20;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">🟢</div>
           <div><div style="font-weight:700;">Wannads</div><div style="font-size:0.75rem;color:var(--text3);">Videos & Tasks</div></div>
-          <span class="badge badge-green" style="margin-left:auto;">Always Active</span>
+          <span id="wannads-badge" class="badge badge-green" style="margin-left:auto;">Active</span>
+        </div>
+        <div class="toggle-row" style="margin-bottom:8px;">
+          <div class="toggle-info"><h4>Wannads Enabled</h4><p>Turn off to temporarily hide from users</p></div>
+          <label class="toggle"><input type="checkbox" id="ow-wannads-enabled" checked onchange="updateWannadsBadge()"/><span class="toggle-slider"></span></label>
         </div>
         <div class="toggle-row">
-          <div class="toggle-info"><h4>Wannads Enabled</h4><p>Turn off to disable for all users</p></div>
-          <label class="toggle"><input type="checkbox" id="ow-wannads-enabled" checked/><span class="toggle-slider"></span></label>
+          <div class="toggle-info"><h4>Temporary Remove</h4><p>Remove from app until re-enabled</p></div>
+          <label class="toggle"><input type="checkbox" id="ow-wannads-temp-remove" onchange="updateWannadsBadge()"/><span class="toggle-slider"></span></label>
         </div>
       </div>
 
@@ -1703,7 +1707,16 @@ function showPage(name) {
   if(name==='tasks') loadTasks();
   if(name==='promoCodes') loadPromoCodes();
   if(name==='notifications') loadSentNotifs();
-  if(name==='offerwalls') { loadOfferwallSettings(); if(typeof loadCustomOfferwallsList==='function') loadCustomOfferwallsList(); }
+  if(name==='offerwalls') {
+    loadOfferwallSettings();
+    if(typeof loadCustomOfferwallsList==='function') loadCustomOfferwallsList();
+    // Scroll page to top when offerwall section opens
+    setTimeout(() => {
+      const pg = document.getElementById('page-offerwalls');
+      if(pg) pg.scrollTop = 0;
+      document.getElementById('mainContent').scrollTop = 0;
+    }, 100);
+  }
 }
 
 function toggleSidebar() {
@@ -2438,6 +2451,29 @@ async function deleteNotification(key) {
   }
 }
 
+// Load user feedback
+async function loadUserFeedback() {
+  if(!db) return;
+  const snap = await fbGet('userFeedback');
+  const container = document.getElementById('feedbackList');
+  if(!container) return;
+  if(!snap || !snap.exists()) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;">No feedback yet</div>';
+    return;
+  }
+  const items = Object.entries(snap.val()).map(([k,v]) => ({key:k,...v})).sort((a,b) => b.timestamp - a.timestamp);
+  container.innerHTML = items.map(f => `
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-weight:700;font-size:0.88rem;">${f.typeLabel||f.type}</span>
+        <span style="font-size:0.72rem;color:var(--text3);">${new Date(f.timestamp).toLocaleString('en-IN')}</span>
+      </div>
+      <div style="font-weight:700;margin-bottom:4px;">${f.subject}</div>
+      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;">${f.message}</div>
+      <div style="font-size:0.72rem;color:var(--text3);">From: ${f.userName} (${f.userEmail||f.uid?.substring(0,12)+'...'})</div>
+    </div>`).join('');
+}
+
 async function loadSentNotifs() {
   if(!db) return;
   const snap = await fbGet('sentNotifications');
@@ -2742,7 +2778,7 @@ async function loadPromoCodes() {
     <tr>
       <td><span style="font-family:monospace;font-size:1rem;color:var(--green);letter-spacing:2px;font-weight:700">${code}</span></td>
       <td style="color:var(--gold);font-weight:700">+${d.coins} Coins</td>
-      <td>${d.maxUses===0?'♾️ No Limit':(d.maxUses-(d.usedCount||0)) + ' left'}</td>
+      <td>${(d.maxUses===0||!d.maxUses)?'♾️ Unlimited':(d.maxUses-(d.usedCount||0)) + ' left'}</td>
       <td>${d.usedCount||0}</td>
       <td style="font-size:0.78rem">${d.createdAt?new Date(d.createdAt).toLocaleDateString('en-IN'):'-'}</td>
       <td><span class="badge ${getPromoStatus(d)==='ACTIVE'?'badge-green':getPromoStatus(d)==='EXPIRED'?'badge-red':'badge-yellow'}">${getPromoStatus(d)}</span></td>
@@ -2765,7 +2801,8 @@ function genPromoCode() {
 async function savePromoCode() {
   const code = document.getElementById('promo-code').value.trim().toUpperCase();
   const coins = parseInt(document.getElementById('promo-coins').value)||100;
-  const maxUses = parseInt(document.getElementById('promo-maxuses').value)||100;
+  const maxUsesRaw = document.getElementById('promo-maxuses').value;
+  const maxUses = (maxUsesRaw === '' || maxUsesRaw === null) ? 0 : parseInt(maxUsesRaw)||0; // 0 = unlimited
   if(!code){showToast('Enter promo code!','danger');return;}
   if(!db){showToast('Firebase not connected!','danger');return;}
   const saveBtn = document.querySelector('#addPromoModal .btn-primary');
@@ -2866,6 +2903,16 @@ async function removeCustomOw(key) {
   });
 }
 
+function updateWannadsBadge() {
+  const enabled = document.getElementById('ow-wannads-enabled')?.checked;
+  const tempRemoved = document.getElementById('ow-wannads-temp-remove')?.checked;
+  const badge = document.getElementById('wannads-badge');
+  if(!badge) return;
+  if(tempRemoved) { badge.textContent='Hidden'; badge.style.background='#ef444420'; badge.style.color='#ef4444'; }
+  else if(enabled) { badge.textContent='Active'; badge.style.background='#16a34a20'; badge.style.color='#16a34a'; }
+  else { badge.textContent='Disabled'; badge.style.background='#6b728020'; badge.style.color='#6b7280'; }
+}
+
 function updateOwBadge(prefix) {
   const fu = document.getElementById('ow-'+prefix+'-forceUnlock')?.checked;
   const fl = document.getElementById('ow-'+prefix+'-forceLock')?.checked;
@@ -2883,7 +2930,10 @@ function updateOwBadge(prefix) {
 async function saveOfferwallSettings() {
   if(!db) { showToast('Firebase not connected!','danger'); return; }
   const settings = {
-    wannads: { locked: !(document.getElementById('ow-wannads-enabled')?.checked) },
+    wannads: { 
+      locked: !(document.getElementById('ow-wannads-enabled')?.checked),
+      tempRemoved: !!(document.getElementById('ow-wannads-temp-remove')?.checked)
+    },
     cpx: { forceLock: !!(document.getElementById('ow-cpx-forceLock')?.checked), forceUnlock: !!(document.getElementById('ow-cpx-forceUnlock')?.checked), lockMessage: document.getElementById('ow-cpx-lockMessage')?.value||'Complete your first withdrawal to unlock CPX Research!' },
     timewall: { forceLock: !!(document.getElementById('ow-tw-forceLock')?.checked), forceUnlock: !!(document.getElementById('ow-tw-forceUnlock')?.checked), lockMessage: document.getElementById('ow-tw-lockMessage')?.value||'Complete your first withdrawal to unlock TimeWall!' }
   };
