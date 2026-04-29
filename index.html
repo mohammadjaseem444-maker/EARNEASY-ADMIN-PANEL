@@ -392,11 +392,56 @@ table { min-width:600px; }
   .stats-grid { grid-template-columns:1fr; }
   .main-content { padding:10px; padding-top:58px; }
 }
+@media (max-width: 600px) {
+  .page-header { flex-direction:column; gap:10px; align-items:flex-start; }
+  .page-header button { width:100%; }
+  .modal-box { max-height:92vh; overflow-y:auto; margin:8px; width:calc(100% - 16px); }
+  .detail-grid { grid-template-columns:1fr 1fr; }
+  #bulkActionsBar { font-size:0.76rem; }
+}
 </style>
 </head>
 <body>
 
 <!-- LOCK SCREEN -->
+<!-- BRAND AMBASSADOR SECTION -->
+<div id="baScreen" style="display:none;position:fixed;inset:0;z-index:9900;background:#0d1f0d;padding:32px 20px;overflow-y:auto;">
+  <div style="max-width:420px;margin:0 auto;text-align:center;padding-top:40px;">
+    <div style="font-size:3rem;margin-bottom:12px;">🌟</div>
+    <div style="font-family:Orbitron,sans-serif;font-size:1.1rem;color:#16a34a;margin-bottom:6px;">Brand Ambassador</div>
+    <div style="font-size:0.82rem;color:#6b7280;margin-bottom:24px;">EarnEasy Creator Access</div>
+    <div id="baContent">
+      <input id="baPwInput" type="password" placeholder="Enter Ambassador Password" 
+        style="width:100%;padding:14px;border:2px solid #16a34a30;border-radius:14px;background:#1a2a1a;color:#fff;font-size:1rem;text-align:center;margin-bottom:12px;box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')doBALogin()"/>
+      <button onclick="doBALogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:14px;font-family:Orbitron,sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;margin-bottom:12px;">ACCESS</button>
+      <button onclick="document.getElementById('baScreen').style.display='none';document.getElementById('lockScreen').style.display='flex';" style="background:none;border:none;color:#6b7280;font-size:0.78rem;cursor:pointer;">← Back to Admin Login</button>
+      <div id="baError" style="color:#ef4444;font-size:0.82rem;margin-top:8px;"></div>
+    </div>
+    <div id="baPanel" style="display:none;text-align:left;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-family:Orbitron,sans-serif;font-size:0.9rem;color:#16a34a;">🎟️ Promo Code Manager</div>
+        <button onclick="logoutBA()" style="padding:6px 12px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:8px;font-size:0.78rem;cursor:pointer;">Logout</button>
+      </div>
+      <!-- Create promo code -->
+      <div style="background:#1a2a1a;border:1px solid #16a34a30;border-radius:14px;padding:16px;margin-bottom:14px;">
+        <div style="font-weight:700;margin-bottom:12px;font-size:0.88rem;color:#16a34a;">Create New Promo Code</div>
+        <input id="ba-code" placeholder="Code (e.g. EARN50)" maxlength="12"
+          style="width:100%;padding:10px;border:1px solid #374151;border-radius:10px;background:#0d1f0d;color:#fff;font-size:0.88rem;margin-bottom:8px;box-sizing:border-box;text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase()"/>
+        <input id="ba-coins" type="number" placeholder="Coins (e.g. 50)" min="1" max="500"
+          style="width:100%;padding:10px;border:1px solid #374151;border-radius:10px;background:#0d1f0d;color:#fff;font-size:0.88rem;margin-bottom:8px;box-sizing:border-box;"/>
+        <input id="ba-maxuses" type="number" placeholder="Max Uses (0=unlimited)" min="0"
+          style="width:100%;padding:10px;border:1px solid #374151;border-radius:10px;background:#0d1f0d;color:#fff;font-size:0.88rem;margin-bottom:12px;box-sizing:border-box;"/>
+        <button onclick="baCreatePromo()" style="width:100%;padding:12px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:12px;font-family:Orbitron,sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer;"><i class="fas fa-plus"></i> CREATE CODE</button>
+      </div>
+      <!-- Active codes list -->
+      <div style="font-weight:700;margin-bottom:10px;font-size:0.85rem;color:var(--text2);">Active Promo Codes</div>
+      <div id="baPromoList"><div style="text-align:center;color:#6b7280;font-size:0.82rem;padding:10px;">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
 <div id="lockScreen">
   <div class="lock-logo">EARNEASY</div>
   <div class="lock-sub">ADMIN CONTROL CENTER</div>
@@ -421,7 +466,7 @@ table { min-width:600px; }
       <i class="fas fa-eye pw-toggle" onclick="togglePw()" id="pwEye" style="right:14px;left:auto;cursor:pointer;"></i>
     </div>
     <div class="lock-attempts" id="lockAttempts"></div>
-    <button class="btn-unlock" onclick="tryUnlock()"><i class="fas fa-unlock-alt"></i> UNLOCK PANEL</button>
+    <button class="btn-unlock" onclick="doUnlock(document.getElementById('pwInput').value)"><i class="fas fa-unlock-alt"></i> UNLOCK PANEL</button>
   </div>
 </div>
 
@@ -473,6 +518,13 @@ table { min-width:600px; }
       </div>
       <div class="sidebar-item" onclick="showPage('offerwalls')" id="nav-offerwalls">
         <i class="fas fa-layer-group"></i> Offerwalls
+      </div>
+      <div class="sidebar-item" onclick="showPage('feedbacks')" id="nav-feedbacks">
+        <i class="fas fa-comments"></i> User Feedbacks
+        <span id="feedback-badge" style="background:#ef4444;color:#fff;border-radius:50%;width:18px;height:18px;font-size:0.65rem;display:inline-flex;align-items:center;justify-content:center;margin-left:auto;display:none;">0</span>
+      </div>
+      <div class="sidebar-item" onclick="showPage('wipedAccounts')" id="nav-wipedAccounts">
+        <i class="fas fa-trash-alt"></i> Wiped Accounts
       </div>
     </div>
     <div class="sidebar-footer">
@@ -587,6 +639,14 @@ table { min-width:600px; }
         <div class="quick-stat">
           <div class="quick-stat-val" id="stat-tasks">0</div>
           <div class="quick-stat-lbl">✅ Active Tasks</div>
+        </div>
+        <div class="quick-stat" onclick="showPage('feedbacks')" style="cursor:pointer;">
+          <div class="quick-stat-val" id="stat-feedbacks" style="color:#3b82f6;">0</div>
+          <div class="quick-stat-lbl">💬 Unread Feedback</div>
+        </div>
+        <div class="quick-stat">
+          <div class="quick-stat-val" id="stat-wiped" style="color:#ef4444;">0</div>
+          <div class="quick-stat-lbl">🗑️ Wiped Accounts</div>
         </div>
       </div>
 
@@ -1179,6 +1239,7 @@ table { min-width:600px; }
       <div class="modal-actions" style="margin-top:14px;">
         <button class="btn-action btn-red" id="ud-banBtn" onclick="toggleBan()" style="padding:12px;justify-content:center;"><i class="fas fa-ban"></i> BAN USER</button>
         <button class="btn-action btn-yellow" onclick="suspendUser()" style="padding:12px;justify-content:center;"><i class="fas fa-pause"></i> SUSPEND</button>
+        <button class="btn-action" onclick="initiateWipeAccount()" style="padding:12px;justify-content:center;background:#7c3aed20;color:#7c3aed;border:1px solid #7c3aed40;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:700;"><i class="fas fa-trash-alt"></i> WIPE ACCOUNT</button>
         <button class="btn-action btn-blue" onclick="openPersonalNotif()" style="padding:12px;justify-content:center;"><i class="fas fa-bell"></i> NOTIFY</button>
         <button class="btn-action btn-green" onclick="closeModal('userDetailModal')" style="padding:12px;justify-content:center;"><i class="fas fa-check"></i> DONE</button>
       </div>
@@ -1490,6 +1551,7 @@ function initFirebase() {
         // Save UID to localStorage so we know it persists
         localStorage.setItem('adminUID', adminUid);
         // Register this UID as admin in Firebase
+        logAdminAction('ADMIN_LOGIN', 'Admin logged in');
         await db.ref('adminUIDs/' + adminUid).set({
           active: true,
           lastLogin: Date.now()
@@ -1600,12 +1662,6 @@ function removePaymentMethod(idx) {
 // ============================================================
 // LOCK/UNLOCK
 // ============================================================
-function tryUnlock() {
-  if (lockTimeout) { showToast('Too many attempts. Wait...','danger'); return; }
-  const pw = document.getElementById('pwInput').value;
-  // Check Firebase password then unlock
-  doUnlock(pw);
-}
 
 async function doUnlock(pw) {
   const attemptsEl = document.getElementById('lockAttempts');
@@ -1667,7 +1723,7 @@ function confirmLogout() {
   });
 }
 
-document.getElementById('pwInput').addEventListener('keypress', e => { if(e.key==='Enter') tryUnlock(); });
+document.getElementById('pwInput').addEventListener('keypress', e => { if(e.key==='Enter') doUnlock(document.getElementById('pwInput').value); });
 
 // ============================================================
 // NAVIGATION
@@ -1731,6 +1787,93 @@ function closeSidebar() {
 // ============================================================
 // DASHBOARD
 // ============================================================
+// ============================================================
+// BRAND AMBASSADOR SYSTEM
+// ============================================================
+const BA_DEFAULT_PASSWORD = 'Ambassador@EarnEasy';
+
+async function doBALogin() {
+  const pw = document.getElementById('baPwInput').value;
+  if(!pw) return;
+  
+  if(!db) { initFirebase(); await new Promise(r => setTimeout(r, 2000)); }
+  
+  let baPw = BA_DEFAULT_PASSWORD;
+  try {
+    const s = await db.ref('adminConfig/ambassadorPassword').get();
+    if(s && s.exists()) baPw = s.val();
+    else db.ref('adminConfig/ambassadorPassword').set(BA_DEFAULT_PASSWORD).catch(()=>{});
+  } catch(e) {}
+  
+  if(pw === baPw) {
+    document.getElementById('baContent').style.display = 'none';
+    document.getElementById('baPanel').style.display = 'block';
+    loadBAPromoCodes();
+  } else {
+    document.getElementById('baError').textContent = '❌ Wrong password!';
+    document.getElementById('baPwInput').value = '';
+  }
+}
+
+function logoutBA() {
+  document.getElementById('baPanel').style.display = 'none';
+  document.getElementById('baContent').style.display = 'block';
+  document.getElementById('baPwInput').value = '';
+  document.getElementById('baScreen').style.display = 'none';
+  document.getElementById('lockScreen').style.display = 'flex';
+}
+
+async function baCreatePromo() {
+  const code = document.getElementById('ba-code').value.trim().toUpperCase();
+  const coins = parseInt(document.getElementById('ba-coins').value) || 0;
+  const maxUses = parseInt(document.getElementById('ba-maxuses').value) || 0;
+  
+  if(!code || code.length < 3) { alert('Enter valid code (min 3 chars)'); return; }
+  if(coins < 1 || coins > 500) { alert('Coins must be 1-500'); return; }
+  if(!/^[A-Z0-9]+$/.test(code)) { alert('Code must be letters and numbers only'); return; }
+  
+  // Check exists
+  const existing = await db.ref('promoCodes/' + code).get();
+  if(existing.exists()) { alert('Code already exists!'); return; }
+  
+  await db.ref('promoCodes/' + code).set({
+    coins, maxUses, usedCount: 0, 
+    createdAt: Date.now(), createdBy: 'ambassador'
+  });
+  
+  document.getElementById('ba-code').value = '';
+  document.getElementById('ba-coins').value = '';
+  document.getElementById('ba-maxuses').value = '';
+  loadBAPromoCodes();
+  alert('✅ Promo code ' + code + ' created with ' + coins + ' coins!');
+}
+
+async function loadBAPromoCodes() {
+  const container = document.getElementById('baPromoList');
+  if(!container) return;
+  const snap = await db.ref('promoCodes').get();
+  if(!snap || !snap.exists()) { container.innerHTML = '<div style="color:#6b7280;font-size:0.82rem;text-align:center;padding:10px;">No codes yet</div>'; return; }
+  const codes = Object.entries(snap.val())
+    .filter(([k,v]) => v.createdBy === 'ambassador')
+    .sort((a,b) => (b[1].createdAt||0)-(a[1].createdAt||0));
+  
+  if(!codes.length) { container.innerHTML = '<div style="color:#6b7280;font-size:0.82rem;text-align:center;padding:10px;">No ambassador codes yet</div>'; return; }
+  container.innerHTML = codes.map(([code, d]) => `
+    <div style="background:#1a2a1a;border:1px solid #16a34a20;border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-family:Orbitron,sans-serif;font-size:0.85rem;color:#16a34a;font-weight:700;">${code}</div>
+        <div style="font-size:0.72rem;color:#6b7280;">${d.coins} coins • ${d.maxUses===0?'Unlimited':((d.maxUses||0)-(d.usedCount||0))+' left'} • Used: ${d.usedCount||0}</div>
+      </div>
+      <button onclick="deleteBACode('${code}')" style="padding:4px 8px;background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:6px;font-size:0.72rem;cursor:pointer;"><i class="fas fa-trash"></i></button>
+    </div>`).join('');
+}
+
+async function deleteBACode(code) {
+  if(!confirm('Delete code ' + code + '?')) return;
+  await db.ref('promoCodes/' + code).remove();
+  loadBAPromoCodes();
+}
+
 async function loadDashboard() {
   if (!db) { showToast('Firebase not connected!','danger'); return; }
   const snap = await fbGet('users');
@@ -1776,16 +1919,49 @@ async function loadDashboard() {
   document.getElementById('stat-pending').textContent = pendingCount;
   document.getElementById('stat-banned').textContent = bannedCount;
   document.getElementById('stat-refers').textContent = totalRefers;
+  // Revenue estimate
+  const CPM = 0.80; // $0.80 per 1000 ads (conservative India estimate)
+  const adsRev = (totalAdsToday / 1000) * CPM;
+  const coinsCost = (totalAdsToday * 3 * 0.01); // 3 coins per ad, ₹0.01 per coin
+  const profit = adsRev - (coinsCost / 85); // convert ₹ to $
+  const revAds = document.getElementById('rev-ads'); if(revAds) revAds.textContent = '$' + adsRev.toFixed(3);
+  const revCost = document.getElementById('rev-cost'); if(revCost) revCost.textContent = '₹' + coinsCost.toFixed(2);
+  const revProfit = document.getElementById('rev-profit'); if(revProfit) { revProfit.textContent = '$' + profit.toFixed(3); revProfit.style.color = profit >= 0 ? '#34d399' : '#f87171'; }
   const _adsEl = document.getElementById('stat-ads-today');
   if(_adsEl) _adsEl.textContent = totalAdsToday.toLocaleString();
   const _gamesEl = document.getElementById('stat-games-today');
   if(_gamesEl) _gamesEl.textContent = totalGamesToday.toLocaleString();
+  // Load feedback unread count
+  fbGet('userFeedback').then(fbSnap => {
+    if(fbSnap && fbSnap.exists()) {
+      const unread = Object.values(fbSnap.val()).filter(f => !f.read).length;
+      const el = document.getElementById('stat-feedbacks');
+      if(el) el.textContent = unread;
+      const badge = document.getElementById('feedback-badge');
+      if(badge) { if(unread>0){badge.textContent=unread;badge.style.display='inline-flex';}else badge.style.display='none'; }
+    }
+  }).catch(()=>{});
+  // Wiped accounts count
+  fbGet('wipedAccounts').then(wSnap => {
+    const el = document.getElementById('stat-wiped');
+    if(el) el.textContent = wSnap && wSnap.exists() ? Object.keys(wSnap.val()).length : 0;
+  }).catch(()=>{});
   document.getElementById('pendingBadge').textContent = pendingCount;
 
   // Tasks count
   const tSnap = await fbGet('tasks');
   document.getElementById('stat-tasks').textContent = (tSnap && tSnap.exists()) ? Object.keys(tSnap.val()).length : 0;
 
+  // Fraud detection alerts
+  const fraudAlerts = [];
+  arr.forEach(u => {
+    const coinsPerDay = u.todayEarned || 0;
+    if(coinsPerDay > 500) fraudAlerts.push({uid:u.uid, name:u.name||'Unknown', reason:'High daily earnings: ' + coinsPerDay + ' coins', level:'high'});
+    if((u.referCount||0) > 10) fraudAlerts.push({uid:u.uid, name:u.name||'Unknown', reason:'High referral count: ' + u.referCount, level:'medium'});
+    if((u.coins||0) > 50000) fraudAlerts.push({uid:u.uid, name:u.name||'Unknown', reason:'Very high balance: ' + u.coins + ' coins', level:'high'});
+  });
+  renderFraudAlerts(fraudAlerts);
+  
   // Recent users table
   const recent = arr.sort((a,b)=>(b.joinedAt||0)-(a.joinedAt||0)).slice(0,8);
   renderRecentUsers(recent);
@@ -1815,6 +1991,26 @@ async function loadAdminNotifications() {
   if(badge) badge.textContent = pending;
   const stat = document.getElementById('stat-pending');
   if(stat) stat.textContent = pending;
+}
+
+function renderFraudAlerts(alerts) {
+  const container = document.getElementById('fraudAlertsList');
+  const countEl = document.getElementById('fraudAlertCount');
+  if(!container) return;
+  if(countEl) countEl.textContent = alerts.length;
+  if(!alerts.length) {
+    container.innerHTML = '<div style="color:var(--text3);font-size:0.82rem;padding:8px 0;">✅ No suspicious activity detected</div>';
+    return;
+  }
+  container.innerHTML = alerts.slice(0,5).map(a => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="width:8px;height:8px;border-radius:50%;background:${a.level==='high'?'#ef4444':'#f59e0b'};flex-shrink:0;"></div>
+      <div style="flex:1;font-size:0.8rem;">
+        <div style="font-weight:700;color:var(--text);" onclick="openUserDetail('${a.uid}')" style="cursor:pointer;">${a.name}</div>
+        <div style="color:var(--text3);">${a.reason}</div>
+      </div>
+      <button onclick="openUserDetail('${a.uid}')" class="btn-action" style="padding:4px 8px;font-size:0.72rem;"><i class="fas fa-eye"></i></button>
+    </div>`).join('');
 }
 
 function renderRecentUsers(arr) {
@@ -1868,6 +2064,9 @@ function filterUsers() {
   renderUsersPage();
 }
 
+let usersPageSize = 10;
+function changePageSize(size) { usersPageSize = parseInt(size); currentPageUsers = 1; renderUsersPage(); }
+
 function renderUsersPage() {
   const q = (document.getElementById('userSearchInput')||{}).value?.toLowerCase()||'';
   const filtered = allUsers.filter(u => (u.name||'').toLowerCase().includes(q));
@@ -1904,6 +2103,108 @@ function renderUsersPage() {
 }
 
 function goUsersPage(n) { currentPageUsers=n; renderUsersPage(); }
+
+function applyUserFilters() {
+  const status = document.getElementById('userFilterStatus')?.value || 'all';
+  const sort = document.getElementById('userSortBy')?.value || 'joined';
+  const q = (document.getElementById('userSearch')?.value || '').toLowerCase();
+  
+  let filtered = [...allUsers];
+  // Status filter
+  if(status === 'banned') filtered = filtered.filter(u => u.banned);
+  else if(status === 'suspended') filtered = filtered.filter(u => u.suspended);
+  else if(status === 'active') filtered = filtered.filter(u => !u.banned && !u.suspended);
+  // Search
+  if(q) filtered = filtered.filter(u => (u.name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q));
+  // Sort
+  if(sort === 'coins_desc') filtered.sort((a,b) => (b.coins||0)-(a.coins||0));
+  else if(sort === 'coins_asc') filtered.sort((a,b) => (a.coins||0)-(b.coins||0));
+  else if(sort === 'withdrawn') filtered.sort((a,b) => (b.totalWithdrawn||0)-(a.totalWithdrawn||0));
+  else if(sort === 'refers') filtered.sort((a,b) => (b.referCount||0)-(a.referCount||0));
+  else filtered.sort((a,b) => (b.joinedAt||0)-(a.joinedAt||0));
+  
+  // Render filtered
+  const tbody = document.getElementById('usersTbody');
+  if(!tbody) return;
+  if(!filtered.length) { tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3)">No users match filter</td></tr>'; return; }
+  
+  tbody.innerHTML = filtered.slice(0, currentPageUsers * 10).map(u => `
+    <tr onclick="openUserDetail('${u.uid}')" style="cursor:pointer;">
+      <td><div class="user-cell">
+        <div class="user-mini-avatar">${(u.name||'?').charAt(0).toUpperCase()}</div>
+        <div><div class="td-main">${u.name||'Unknown'}</div><div style="font-size:0.7rem;color:#3b82f6;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${u.email||'—'}">${u.email||'—'}</div></div>
+      </div></td>
+      <td>${u.joinedAt ? new Date(u.joinedAt).toLocaleDateString('en-IN') : '-'}</td>
+      <td class="td-coins">${(u.coins||0).toLocaleString()}</td>
+      <td>₹${(u.totalWithdrawn||0).toFixed(2)}</td>
+      <td>${u.referCount||0}</td>
+      <td><span class="status-badge ${u.banned?'banned':u.suspended?'suspended':'active'}">${u.banned?'Banned':u.suspended?'Suspended':'Active'}</span></td>
+      <td><button class="btn-action" onclick="event.stopPropagation();openUserDetail('${u.uid}')"><i class="fas fa-eye"></i></button></td>
+    </tr>`).join('');
+}
+
+let _selectedUsers = new Set();
+
+function toggleSelectAll(cb) {
+  const rows = document.querySelectorAll('#usersTbody input[type=checkbox]');
+  rows.forEach(r => { r.checked = cb.checked; if(cb.checked) _selectedUsers.add(r.dataset.uid); else _selectedUsers.delete(r.dataset.uid); });
+  updateBulkBar();
+}
+function toggleUserSelect(uid, cb) {
+  if(cb.checked) _selectedUsers.add(uid);
+  else _selectedUsers.delete(uid);
+  updateBulkBar();
+}
+function updateBulkBar() {
+  const bar = document.getElementById('bulkActionsBar');
+  if(bar) { bar.style.display = _selectedUsers.size > 0 ? 'flex' : 'none'; }
+  const cnt = document.getElementById('bulkCount');
+  if(cnt) cnt.textContent = _selectedUsers.size + ' selected';
+}
+function clearBulkSelect() {
+  _selectedUsers.clear();
+  document.querySelectorAll('#usersTbody input[type=checkbox]').forEach(r => r.checked = false);
+  const sel = document.getElementById('selectAllUsers'); if(sel) sel.checked = false;
+  updateBulkBar();
+}
+async function bulkAction(action) {
+  if(!_selectedUsers.size) return;
+  const uids = [..._selectedUsers];
+  if(action === 'ban') {
+    showModal('⚠️','Ban ' + uids.length + ' Users?','This will ban all selected users.','warning', async () => {
+      const updates = {}; uids.forEach(uid => { updates['users/'+uid+'/banned'] = true; });
+      await db.ref().update(updates); showToast('✅ ' + uids.length + ' users banned!'); clearBulkSelect(); loadUsers();
+    });
+  } else if(action === 'unban') {
+    const updates = {}; uids.forEach(uid => { updates['users/'+uid+'/banned'] = false; });
+    await db.ref().update(updates); showToast('✅ ' + uids.length + ' users unbanned!'); clearBulkSelect(); loadUsers();
+  } else if(action === 'notify') {
+    const msg = prompt('Notification message for ' + uids.length + ' users:');
+    if(!msg) return;
+    for(const uid of uids) {
+      await sendUserNotification(uid, '📢 Admin Message', msg, 'system');
+    }
+    showToast('✅ Notification sent to ' + uids.length + ' users!'); clearBulkSelect();
+  }
+}
+
+function exportUsersCSV() {
+  if(!allUsers.length) { showToast('No users to export!'); return; }
+  const headers = ['Name','Email','UID','Coins','Withdrawn','Refers','Joined','Status'];
+  const rows = allUsers.map(u => [
+    u.name||'Unknown', u.email||'', u.uid,
+    u.coins||0, u.totalWithdrawn||0, u.referCount||0,
+    u.joinedAt ? new Date(u.joinedAt).toLocaleDateString('en-IN') : '-',
+    u.banned?'Banned':u.suspended?'Suspended':'Active'
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
+');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'earneasy_users_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast('✅ CSV exported!');
+}
 
 // ============================================================
 // USER DETAIL
@@ -1952,6 +2253,118 @@ async function editCoins(sign) {
       showToast('❌ Failed!','danger');
     }
   });
+}
+
+let _wipeConfirmCode = '';
+let _wipeTargetUid = '';
+
+function initiateWipeAccount() {
+  if(!selectedUser) return;
+  _wipeConfirmCode = String(Math.floor(1000 + Math.random() * 9000));
+  _wipeTargetUid = selectedUser.uid;
+  document.getElementById('wipe-confirm-code').textContent = _wipeConfirmCode;
+  document.getElementById('wipe-user-info').textContent = `Wipe account: ${selectedUser.name||'Unknown'} (${selectedUser.email||selectedUser.uid?.substring(0,16)})`;
+  document.getElementById('wipe-input').value = '';
+  document.getElementById('wipeModal').style.display = 'flex';
+}
+
+function closeWipeModal() {
+  document.getElementById('wipeModal').style.display = 'none';
+  _wipeConfirmCode = '';
+  _wipeTargetUid = '';
+}
+
+async function confirmWipeAccount() {
+  const entered = document.getElementById('wipe-input').value.trim();
+  if(entered !== _wipeConfirmCode) {
+    showToast('❌ Wrong code! Account NOT wiped.', 'danger');
+    document.getElementById('wipe-input').value = '';
+    return;
+  }
+  if(!_wipeTargetUid || !db) return;
+  
+  const uid = _wipeTargetUid;
+  const u = allUsers.find(x => x.uid === uid) || selectedUser || {};
+  
+  closeWipeModal();
+  showToast('⏳ Wiping account...');
+  
+  try {
+    // Save to wipedAccounts BEFORE deleting
+    await db.ref('wipedAccounts/' + uid).set({
+      uid, name: u.name||'Unknown', email: u.email||'',
+      coins: u.coins||0, joinedAt: u.joinedAt||0,
+      wipedAt: Date.now(), wipedBy: 'admin',
+      referCode: u.referCode||''
+    });
+    
+    // Delete from deviceFingerprints (allow re-registration)
+    if(u.deviceInfo) {
+      const fpSnap = await db.ref('deviceFingerprints').orderByChild('uid').equalTo(uid).once('value');
+      if(fpSnap.exists()) {
+        const updates = {};
+        Object.keys(fpSnap.val()).forEach(k => updates['deviceFingerprints/'+k] = null);
+        await db.ref().update(updates);
+      }
+    }
+    
+    // Delete user's deviceFingerprint reference
+    if(u.deviceFingerprint) await db.ref('deviceFingerprints/' + u.deviceFingerprint).remove().catch(()=>{});
+    
+    // Remove username
+    if(u.name) await db.ref('usernames/' + u.name.toLowerCase()).remove().catch(()=>{});
+    
+    // Remove referral code
+    if(u.referCode) await db.ref('referLookup/' + u.referCode).remove().catch(()=>{});
+    
+    // Delete user data
+    await db.ref('users/' + uid).remove();
+    
+    // Update local list
+    allUsers = allUsers.filter(x => x.uid !== uid);
+    renderUsersPage();
+    closeModal();
+    showModal('✅', 'Account Wiped!', `${u.name||'User'}'s account has been permanently wiped. They can create a new account.`, 'success');
+    
+    // Update dashboard wiped count
+    const wipedEl = document.getElementById('stat-wiped');
+    if(wipedEl) wipedEl.textContent = (parseInt(wipedEl.textContent)||0) + 1;
+    
+    showToast('🗑️ Account wiped successfully!');
+  } catch(e) {
+    console.error('Wipe error:', e);
+    showToast('❌ Wipe failed: ' + e.message, 'danger');
+  }
+}
+
+async function loadWipedAccounts() {
+  const container = document.getElementById('wipedAccountsList');
+  if(!container) return;
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  try {
+    const snap = await fbGet('wipedAccounts');
+    if(!snap || !snap.exists()) {
+      container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">No wiped accounts yet</div>';
+      return;
+    }
+    const wiped = Object.values(snap.val()).sort((a,b) => (b.wipedAt||0)-(a.wipedAt||0));
+    container.innerHTML = wiped.map(w => `
+      <div class="settings-card" style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:42px;height:42px;border-radius:50%;background:#7c3aed20;border:2px solid #7c3aed40;display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:#7c3aed;font-weight:900;">${(w.name||'?').charAt(0).toUpperCase()}</div>
+          <div style="flex:1;">
+            <div style="font-weight:700;">${w.name||'Unknown'}</div>
+            <div style="font-size:0.75rem;color:var(--text3);">${w.email||w.uid?.substring(0,20)||''}</div>
+            <div style="font-size:0.7rem;color:var(--text2);margin-top:2px;">
+              Wiped: ${new Date(w.wipedAt||0).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} 
+              • Had ${(w.coins||0).toLocaleString()} coins
+            </div>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    container.innerHTML = '<div style="color:red;padding:20px;">Error: ' + e.message + '</div>';
+  }
 }
 
 async function toggleBan() {
@@ -2349,6 +2762,12 @@ async function saveTask() {
   }
 }
 
+async function toggleTask(id, currentlyActive) {
+  await db.ref('tasks/' + id + '/active').set(!currentlyActive);
+  showToast(currentlyActive ? '⏸ Task disabled' : '▶ Task enabled');
+  loadTasks();
+}
+
 async function deleteTask(id) {
   confirmAction('🗑️','Delete Task','Are you sure you want to delete this task?',async()=>{
     if(!db){showToast('Firebase not connected!','danger');return;}
@@ -2451,28 +2870,115 @@ async function deleteNotification(key) {
   }
 }
 
-// Load user feedback
-async function loadUserFeedback() {
-  if(!db) return;
-  const snap = await fbGet('userFeedback');
-  const container = document.getElementById('feedbackList');
+let _allFeedbacks = [];
+let _currentFbFilter = 'all';
+
+async function loadAdminFeedbacks() {
+  const container = document.getElementById('adminFeedbackList');
   if(!container) return;
-  if(!snap || !snap.exists()) {
-    container.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;">No feedback yet</div>';
-    return;
-  }
-  const items = Object.entries(snap.val()).map(([k,v]) => ({key:k,...v})).sort((a,b) => b.timestamp - a.timestamp);
-  container.innerHTML = items.map(f => `
-    <div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.88rem;">${f.typeLabel||f.type}</span>
-        <span style="font-size:0.72rem;color:var(--text3);">${new Date(f.timestamp).toLocaleString('en-IN')}</span>
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  try {
+    const snap = await fbGet('userFeedback');
+    if(!snap || !snap.exists()) {
+      container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">No feedbacks yet 💬</div>';
+      return;
+    }
+    _allFeedbacks = Object.entries(snap.val()).map(([k,v]) => ({key:k,...v})).sort((a,b) => (b.timestamp||0)-(a.timestamp||0));
+    renderFeedbacks();
+    updateFeedbackBadge();
+  } catch(e) { container.innerHTML = '<div style="color:red;padding:20px;">Error: ' + e.message + '</div>'; }
+}
+
+function renderFeedbacks() {
+  const container = document.getElementById('adminFeedbackList');
+  if(!container) return;
+  const filtered = _currentFbFilter === 'all' ? _allFeedbacks : _allFeedbacks.filter(f => f.type === _currentFbFilter);
+  if(!filtered.length) { container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3)">No feedbacks for this filter</div>'; return; }
+  
+  container.innerHTML = filtered.map(f => `
+    <div class="settings-card" style="margin-bottom:10px;${!f.read?'border-color:#3b82f660;background:var(--card2);':''}" id="fb-item-${f.key}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            ${!f.read?'<span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;flex-shrink:0;"></span>':''}
+            <span style="font-size:0.78rem;font-weight:700;padding:2px 8px;border-radius:20px;background:${f.type==='bug'?'#ef444420':f.type==='feature'?'#3b82f620':'#f59e0b20'};color:${f.type==='bug'?'#ef4444':f.type==='feature'?'#3b82f6':'#f59e0b'};">${f.typeLabel||f.type}</span>
+            <span style="font-size:0.7rem;color:var(--text3);">${new Date(f.timestamp||0).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+          </div>
+          <div style="font-weight:700;font-size:0.92rem;margin-bottom:4px;">${f.subject||'No subject'}</div>
+          <div style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;line-height:1.5;">${f.message||''}</div>
+          <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="viewFeedbackUser('${f.uid}')">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.78rem;font-weight:700;">${(f.userName||'?').charAt(0).toUpperCase()}</div>
+            <div>
+              <div style="font-size:0.78rem;font-weight:700;color:var(--green);">${f.userName||'Unknown'}</div>
+              <div style="font-size:0.68rem;color:var(--text3);">${f.userEmail||f.uid?.substring(0,20)||''}</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+          ${!f.read?`<button onclick="markFeedbackRead('${f.key}')" class="btn-action btn-green" style="padding:6px 10px;font-size:0.7rem;"><i class="fas fa-check"></i></button>`:''}
+          <button onclick="deleteFeedback('${f.key}')" class="btn-action btn-red" style="padding:6px 10px;font-size:0.7rem;"><i class="fas fa-trash"></i></button>
+        </div>
       </div>
-      <div style="font-weight:700;margin-bottom:4px;">${f.subject}</div>
-      <div style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;">${f.message}</div>
-      <div style="font-size:0.72rem;color:var(--text3);">From: ${f.userName} (${f.userEmail||f.uid?.substring(0,12)+'...'})</div>
     </div>`).join('');
 }
+
+function filterFeedback(type) {
+  _currentFbFilter = type;
+  ['all','bug','feature','help'].forEach(t => {
+    const btn = document.getElementById('fb-filter-'+t);
+    if(btn) btn.className = t===type ? 'btn-primary' : 'btn-outline';
+    if(btn) btn.style.cssText = 'padding:7px 14px;font-size:0.78rem;';
+  });
+  renderFeedbacks();
+}
+
+async function markFeedbackRead(key) {
+  await db.ref('userFeedback/' + key + '/read').set(true);
+  const idx = _allFeedbacks.findIndex(f => f.key===key);
+  if(idx > -1) _allFeedbacks[idx].read = true;
+  renderFeedbacks();
+  updateFeedbackBadge();
+}
+
+async function markAllFeedbackRead() {
+  const updates = {};
+  _allFeedbacks.forEach(f => { if(!f.read) updates['userFeedback/' + f.key + '/read'] = true; f.read = true; });
+  if(Object.keys(updates).length) await db.ref().update(updates);
+  renderFeedbacks();
+  updateFeedbackBadge();
+  showToast('✅ All feedbacks marked as read!');
+}
+
+async function deleteFeedback(key) {
+  showModal('🗑️','Delete Feedback?','Remove this feedback permanently?','warning', async () => {
+    await db.ref('userFeedback/' + key).remove();
+    _allFeedbacks = _allFeedbacks.filter(f => f.key !== key);
+    renderFeedbacks();
+    updateFeedbackBadge();
+    showToast('🗑️ Deleted!');
+  });
+}
+
+function updateFeedbackBadge() {
+  const unread = _allFeedbacks.filter(f => !f.read).length;
+  const badge = document.getElementById('feedback-badge');
+  if(!badge) return;
+  if(unread > 0) { badge.textContent = unread; badge.style.display = 'inline-flex'; }
+  else badge.style.display = 'none';
+  // Update dashboard
+  const dashFb = document.getElementById('stat-feedbacks');
+  if(dashFb) dashFb.textContent = unread;
+}
+
+async function viewFeedbackUser(uid) {
+  if(!uid) return;
+  const u = allUsers.find(x => x.uid === uid);
+  if(u) showUserDetail(uid);
+  else { showToast('Loading user...'); await loadUsers(); const u2 = allUsers.find(x=>x.uid===uid); if(u2) showUserDetail(uid); }
+}
+
+// Legacy function for notifications tab
+async function loadUserFeedback() { loadAdminFeedbacks(); }
 
 async function loadSentNotifs() {
   if(!db) return;
@@ -2641,6 +3147,15 @@ function removeChip(amt) {
 
 // Change admin password
 
+async function saveAmbassadorPassword() {
+  const pw = document.getElementById('ba-new-pw')?.value?.trim();
+  if(!pw || pw.length < 6) { showToast('Min 6 characters!','danger'); return; }
+  await db.ref('adminConfig/ambassadorPassword').set(pw);
+  document.getElementById('ba-new-pw').value = '';
+  showToast('✅ Ambassador password updated!');
+  logAdminAction('BA_PW_CHANGE', 'Ambassador password changed');
+}
+
 async function changeAdminPassword() {
   const currentPw = document.getElementById('set-currentPw').value;
   const newPw = document.getElementById('set-newPw').value;
@@ -2673,6 +3188,7 @@ async function changeAdminPassword() {
     document.getElementById('set-newPw').value = '';
     document.getElementById('set-confirmPw').value = '';
     showToast('✅ Password changed! Note it down safely.','success');
+    logAdminAction('PASSWORD_CHANGE', 'Admin panel password changed');
   } catch(e) {
     showToast('❌ Failed to save password!','danger');
   }
@@ -2999,6 +3515,17 @@ async function openReferralTree(uid) {
 }
 
 // ============================================================
+// ACTION LOGS
+// ============================================================
+async function logAdminAction(action, details) {
+  if(!db) return;
+  db.ref('adminLogs').push({
+    action, details, time: Date.now(),
+    timestamp: new Date().toLocaleString('en-IN')
+  }).catch(()=>{});
+}
+
+// ============================================================
 // TOAST
 // ============================================================
 let toastTimer;
@@ -3036,6 +3563,57 @@ async function refreshAdminPassword() {
     }
   } catch(e) {}
 }
+    <!-- FEEDBACKS PAGE -->
+    <div class="page" id="page-feedbacks">
+      <div class="page-header">
+        <div>
+          <div class="page-title">User <span>Feedbacks</span></div>
+          <div class="page-sub">Bug reports, feature requests & help</div>
+        </div>
+        <button class="btn-outline" onclick="markAllFeedbackRead()" style="padding:8px 14px;font-size:0.82rem;"><i class="fas fa-check-double"></i> Mark All Read</button>
+      </div>
+      <!-- Filter tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <button onclick="filterFeedback('all')" id="fb-filter-all" class="btn-primary" style="padding:7px 14px;font-size:0.78rem;">All</button>
+        <button onclick="filterFeedback('bug')" id="fb-filter-bug" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">🐛 Bugs</button>
+        <button onclick="filterFeedback('feature')" id="fb-filter-feature" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">✨ Features</button>
+        <button onclick="filterFeedback('help')" id="fb-filter-help" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">❓ Help</button>
+      </div>
+      <div id="adminFeedbackList"><div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+    </div>
+
+    <!-- WIPED ACCOUNTS PAGE -->
+    <div class="page" id="page-wipedAccounts">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Wiped <span>Accounts</span></div>
+          <div class="page-sub">Permanently wiped user accounts</div>
+        </div>
+      </div>
+      <div id="wipedAccountsList"><div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+    </div>
+
+    <!-- WIPE ACCOUNT MODAL -->
+    <div id="wipeModal" style="display:none;position:fixed;inset:0;z-index:9999;background:#00000090;align-items:center;justify-content:center;padding:16px;">
+      <div style="background:var(--card);border:2px solid #7c3aed40;border-radius:20px;padding:24px;width:100%;max-width:360px;text-align:center;">
+        <div style="font-size:2.5rem;margin-bottom:8px;">⚠️</div>
+        <div style="font-family:Orbitron,sans-serif;font-size:0.95rem;color:#7c3aed;margin-bottom:8px;">WIPE ACCOUNT</div>
+        <div style="font-size:0.82rem;color:var(--text2);margin-bottom:16px;" id="wipe-user-info">This will permanently delete all user data.</div>
+        <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:10px;margin-bottom:16px;font-size:0.8rem;color:#92400e;">
+          ⚠️ This action is <strong>irreversible!</strong><br/>User can create a new account after wipe.
+        </div>
+        <div style="font-size:0.85rem;color:var(--text2);margin-bottom:8px;">Enter this code to confirm:</div>
+        <div style="font-family:Orbitron,sans-serif;font-size:2rem;font-weight:900;color:#7c3aed;letter-spacing:8px;margin-bottom:14px;" id="wipe-confirm-code">0000</div>
+        <input id="wipe-input" type="number" maxlength="4" placeholder="Enter 4-digit code" 
+          style="width:100%;padding:12px;border:2px solid #7c3aed40;border-radius:12px;font-size:1.2rem;text-align:center;font-family:Orbitron,sans-serif;letter-spacing:6px;margin-bottom:14px;box-sizing:border-box;background:var(--card2);color:var(--text);"
+          oninput="this.value=this.value.slice(0,4)"/>
+        <div style="display:flex;gap:8px;">
+          <button onclick="closeWipeModal()" style="flex:1;padding:12px;background:var(--card2);border:1px solid var(--border);border-radius:12px;font-weight:700;cursor:pointer;color:var(--text);">Cancel</button>
+          <button onclick="confirmWipeAccount()" style="flex:1;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">WIPE</button>
+        </div>
+      </div>
+    </div>
+
 </script>
 </body>
 </html>
