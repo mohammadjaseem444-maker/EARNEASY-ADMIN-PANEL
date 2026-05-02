@@ -1191,8 +1191,59 @@ table { min-width:600px; }
       </div>
     </div>
 
+    <!-- FEEDBACKS PAGE -->
+    <div class="page" id="page-feedbacks">
+      <div class="page-header">
+        <div>
+          <div class="page-title">User <span>Feedbacks</span></div>
+          <div class="page-sub">Bug reports, feature requests & help</div>
+        </div>
+        <button class="btn-outline" onclick="markAllFeedbackRead()" style="padding:8px 14px;font-size:0.82rem;"><i class="fas fa-check-double"></i> Mark All Read</button>
+      </div>
+      <!-- Filter tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <button onclick="filterFeedback('all')" id="fb-filter-all" class="btn-primary" style="padding:7px 14px;font-size:0.78rem;">All</button>
+        <button onclick="filterFeedback('bug')" id="fb-filter-bug" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">🐛 Bugs</button>
+        <button onclick="filterFeedback('feature')" id="fb-filter-feature" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">✨ Features</button>
+        <button onclick="filterFeedback('help')" id="fb-filter-help" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">❓ Help</button>
+      </div>
+      <div id="adminFeedbackList"><div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+    </div>
+
+    <!-- WIPED ACCOUNTS PAGE -->
+    <div class="page" id="page-wipedAccounts">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Wiped <span>Accounts</span></div>
+          <div class="page-sub">Permanently wiped user accounts</div>
+        </div>
+      </div>
+      <div id="wipedAccountsList"><div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+    </div>
+
   </div><!-- end main-content -->
 </div><!-- end adminApp -->
+
+<!-- WIPE ACCOUNT MODAL -->
+<div id="wipeModal" style="display:none;position:fixed;inset:0;z-index:9999;background:#00000090;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--card);border:2px solid #7c3aed40;border-radius:20px;padding:24px;width:100%;max-width:360px;text-align:center;">
+    <div style="font-size:2.5rem;margin-bottom:8px;">⚠️</div>
+    <div style="font-family:Orbitron,sans-serif;font-size:0.95rem;color:#7c3aed;margin-bottom:8px;">WIPE ACCOUNT</div>
+    <div style="font-size:0.82rem;color:var(--text2);margin-bottom:16px;" id="wipe-user-info">This will permanently delete all user data.</div>
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:10px;margin-bottom:16px;font-size:0.8rem;color:#92400e;">
+      ⚠️ This action is <strong>irreversible!</strong><br/>User can create a new account after wipe.
+    </div>
+    <div style="font-size:0.85rem;color:var(--text2);margin-bottom:8px;">Enter this code to confirm:</div>
+    <div style="font-family:Orbitron,sans-serif;font-size:2rem;font-weight:900;color:#7c3aed;letter-spacing:8px;margin-bottom:14px;" id="wipe-confirm-code">0000</div>
+    <input id="wipe-input" type="number" maxlength="4" placeholder="Enter 4-digit code"
+      style="width:100%;padding:12px;border:2px solid #7c3aed40;border-radius:12px;font-size:1.2rem;text-align:center;font-family:Orbitron,sans-serif;letter-spacing:6px;margin-bottom:14px;box-sizing:border-box;background:var(--card2);color:var(--text);"
+      oninput="this.value=this.value.slice(0,4)"/>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closeWipeModal()" style="flex:1;padding:12px;background:var(--card2);border:1px solid var(--border);border-radius:12px;font-weight:700;cursor:pointer;color:var(--text);">Cancel</button>
+      <button onclick="confirmWipeAccount()" style="flex:1;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">WIPE</button>
+    </div>
+  </div>
+</div>
 
 <!-- USER DETAIL MODAL -->
 <div class="modal-overlay" id="userDetailModal">
@@ -1664,43 +1715,70 @@ function removePaymentMethod(idx) {
 // ============================================================
 
 async function doUnlock(pw) {
-  const attemptsEl = document.getElementById('lockAttempts');
-  
-  // Get valid password: Firebase first, hardcoded as fallback
+  // Block if still in lockout period
+  if(lockTimeout) return;
+  if(!pw || !pw.trim()) {
+    document.getElementById('lockAttempts').textContent = '⚠️ Enter your password first.';
+    return;
+  }
+
+  // Show loading state on button
+  const btn = document.querySelector('.btn-unlock');
+  const origHTML = btn ? btn.innerHTML : '';
+  if(btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...'; btn.disabled = true; }
+  document.getElementById('lockAttempts').textContent = '';
+
+  // Get valid password: Firebase first (with 4s timeout), hardcoded as fallback
   let validPassword = ADMIN_PASSWORD;
   if(db) {
     try {
-      const s = await db.ref('adminConfig/password').get();
+      const s = await Promise.race([
+        db.ref('adminConfig/password').get(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+      ]);
       if(s && s.exists() && s.val()) {
         validPassword = s.val();
       } else {
-        db.ref('adminConfig/password').set(ADMIN_PASSWORD).catch(()=>{});
+        // First time: save default password to Firebase (best effort)
+        db.ref('adminConfig/password').set(ADMIN_PASSWORD).catch(() => {});
       }
-    } catch(e) { console.warn('PW check:', e.message); }
+    } catch(e) {
+      console.warn('PW Firebase check failed, using default:', e.message);
+      // Falls back to ADMIN_PASSWORD — correct password still works
+    }
   }
-  
-  if (pw === validPassword) {
-    sessionStorage.setItem('adminUnlocked','1');
+
+  if(pw === validPassword) {
+    sessionStorage.setItem('adminUnlocked', '1');
+    document.getElementById('lockScreen').style.transition = 'opacity 0.4s';
     document.getElementById('lockScreen').style.opacity = '0';
     setTimeout(() => {
       document.getElementById('lockScreen').style.display = 'none';
       document.getElementById('adminApp').classList.add('active');
-      initFirebase();
-      loadDashboard();
     }, 400);
-    document.getElementById('lockScreen').style.transition = 'opacity 0.4s';
+    // Load dashboard after 2 seconds so adminUID is definitely registered in Firebase by then
+    setTimeout(() => {
+      if(typeof loadDashboard === 'function') loadDashboard();
+    }, 2000);
   } else {
+    // Wrong password
+    if(btn) { btn.innerHTML = origHTML; btn.disabled = false; }
     attemptCount++;
     const left = MAX_ATTEMPTS - attemptCount;
     document.getElementById('lockAttempts').textContent = `❌ Wrong password! ${left} attempts left.`;
-    document.getElementById('lockBox') && document.getElementById('lockBox').classList.add('shake');
+    // Shake animation on lock box
+    const lockBox = document.querySelector('.lock-box');
+    if(lockBox) { lockBox.classList.add('shake'); setTimeout(() => lockBox.classList.remove('shake'), 600); }
     document.getElementById('pwInput').value = '';
-    if (attemptCount >= MAX_ATTEMPTS) {
+    document.getElementById('pwInput').focus();
+    if(attemptCount >= MAX_ATTEMPTS) {
       document.getElementById('lockAttempts').textContent = '🔒 Too many attempts! Locked for 30 seconds.';
+      if(btn) { btn.disabled = true; btn.innerHTML = '🔒 LOCKED'; }
       lockTimeout = setTimeout(() => {
         lockTimeout = null;
         attemptCount = 0;
         document.getElementById('lockAttempts').textContent = '';
+        if(btn) { btn.innerHTML = origHTML; btn.disabled = false; }
       }, 30000);
     }
   }
@@ -2197,8 +2275,7 @@ function exportUsersCSV() {
     u.joinedAt ? new Date(u.joinedAt).toLocaleDateString('en-IN') : '-',
     u.banned?'Banned':u.suspended?'Suspended':'Active'
   ]);
-  const csv = [headers, ...rows].map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
-');
+  const csv = [headers, ...rows].map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'earneasy_users_' + new Date().toISOString().split('T')[0] + '.csv';
@@ -3544,12 +3621,17 @@ function showToast(msg, type='success') {
 // INIT
 // ============================================================
 window.addEventListener('load', async () => {
-  // Init Firebase ALWAYS on load (needed for password check)
+  // Init Firebase on load (handles auth, adminUID registration, and loadDashboard after 1500ms)
   initFirebase();
-  
-  if(sessionStorage.getItem('adminUnlocked')==='1') {
-    document.getElementById('lockScreen').style.display='none';
+
+  if(sessionStorage.getItem('adminUnlocked') === '1') {
+    document.getElementById('lockScreen').style.display = 'none';
     document.getElementById('adminApp').classList.add('active');
+    // initFirebase will call loadDashboard after adminUID is registered (~1500ms)
+    // Extra fallback in case initFirebase timer already fired before this runs
+    setTimeout(() => {
+      if(typeof loadDashboard === 'function' && db) loadDashboard();
+    }, 2000);
   }
 });
 
@@ -3563,57 +3645,6 @@ async function refreshAdminPassword() {
     }
   } catch(e) {}
 }
-    <!-- FEEDBACKS PAGE -->
-    <div class="page" id="page-feedbacks">
-      <div class="page-header">
-        <div>
-          <div class="page-title">User <span>Feedbacks</span></div>
-          <div class="page-sub">Bug reports, feature requests & help</div>
-        </div>
-        <button class="btn-outline" onclick="markAllFeedbackRead()" style="padding:8px 14px;font-size:0.82rem;"><i class="fas fa-check-double"></i> Mark All Read</button>
-      </div>
-      <!-- Filter tabs -->
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-        <button onclick="filterFeedback('all')" id="fb-filter-all" class="btn-primary" style="padding:7px 14px;font-size:0.78rem;">All</button>
-        <button onclick="filterFeedback('bug')" id="fb-filter-bug" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">🐛 Bugs</button>
-        <button onclick="filterFeedback('feature')" id="fb-filter-feature" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">✨ Features</button>
-        <button onclick="filterFeedback('help')" id="fb-filter-help" class="btn-outline" style="padding:7px 14px;font-size:0.78rem;">❓ Help</button>
-      </div>
-      <div id="adminFeedbackList"><div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
-    </div>
-
-    <!-- WIPED ACCOUNTS PAGE -->
-    <div class="page" id="page-wipedAccounts">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Wiped <span>Accounts</span></div>
-          <div class="page-sub">Permanently wiped user accounts</div>
-        </div>
-      </div>
-      <div id="wipedAccountsList"><div style="text-align:center;padding:30px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
-    </div>
-
-    <!-- WIPE ACCOUNT MODAL -->
-    <div id="wipeModal" style="display:none;position:fixed;inset:0;z-index:9999;background:#00000090;align-items:center;justify-content:center;padding:16px;">
-      <div style="background:var(--card);border:2px solid #7c3aed40;border-radius:20px;padding:24px;width:100%;max-width:360px;text-align:center;">
-        <div style="font-size:2.5rem;margin-bottom:8px;">⚠️</div>
-        <div style="font-family:Orbitron,sans-serif;font-size:0.95rem;color:#7c3aed;margin-bottom:8px;">WIPE ACCOUNT</div>
-        <div style="font-size:0.82rem;color:var(--text2);margin-bottom:16px;" id="wipe-user-info">This will permanently delete all user data.</div>
-        <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:10px;margin-bottom:16px;font-size:0.8rem;color:#92400e;">
-          ⚠️ This action is <strong>irreversible!</strong><br/>User can create a new account after wipe.
-        </div>
-        <div style="font-size:0.85rem;color:var(--text2);margin-bottom:8px;">Enter this code to confirm:</div>
-        <div style="font-family:Orbitron,sans-serif;font-size:2rem;font-weight:900;color:#7c3aed;letter-spacing:8px;margin-bottom:14px;" id="wipe-confirm-code">0000</div>
-        <input id="wipe-input" type="number" maxlength="4" placeholder="Enter 4-digit code" 
-          style="width:100%;padding:12px;border:2px solid #7c3aed40;border-radius:12px;font-size:1.2rem;text-align:center;font-family:Orbitron,sans-serif;letter-spacing:6px;margin-bottom:14px;box-sizing:border-box;background:var(--card2);color:var(--text);"
-          oninput="this.value=this.value.slice(0,4)"/>
-        <div style="display:flex;gap:8px;">
-          <button onclick="closeWipeModal()" style="flex:1;padding:12px;background:var(--card2);border:1px solid var(--border);border-radius:12px;font-weight:700;cursor:pointer;color:var(--text);">Cancel</button>
-          <button onclick="confirmWipeAccount()" style="flex:1;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;">WIPE</button>
-        </div>
-      </div>
-    </div>
-
 </script>
 </body>
 </html>
